@@ -163,7 +163,36 @@ if st.session_state.get("df_out") is not None:
     plot_timeseries(df_out, title=f"resampled @ {int(fs_out)} Hz")
 
     # 2) ダウンロード（クライアントPCへ保存）
-    csv_bytes = df_out.to_csv(index=False, header=True, float_format="%.6f").encode("utf-8")
+    # ▼▼ ここでCSVフォーマットを変換 ▼▼
+
+    df_out = st.session_state["df_out"]
+
+    # リサンプル後のサンプル数・チャンネル数
+    N = len(df_out)
+    ch = df_out.shape[1]
+
+    # 8列の固定フォーマットを作る
+    # col1="ags"、col2=0〜N-1、col3〜col(2+ch)=データ、残り0埋め
+    data = np.zeros((N, 8), dtype=object)
+
+    data[:, 0] = "ags"          # 1列目
+    data[:, 1] = np.arange(N)   # 2列目（サンプル番号）
+
+    # 3〜(2+ch)列 に データを詰める
+    for i in range(ch):
+        data[:, 2 + i] = df_out.iloc[:, i].values
+
+    # DataFrame化（ヘッダなし）
+    df_export = pd.DataFrame(data)
+
+    # CSV バイトへ変換（ヘッダなし、indexなし）
+    csv_bytes = df_export.to_csv(
+        index=False,
+        header=False,
+        float_format="%.6f"
+    ).encode("utf-8")
+
+    # ▼ ダウンロードボタン
     st.download_button(
         label="CSVをダウンロード",
         data=csv_bytes,
@@ -171,6 +200,7 @@ if st.session_state.get("df_out") is not None:
         mime="text/csv",
         use_container_width=True,
     )
+
 
 # フッター
 st.caption("© WAV→CSV / polyphase resampling (Kaiser β=8.6) / 多ch対応 / plot≤200kpts")
