@@ -22,7 +22,7 @@ from scipy.signal import resample_poly
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="wav2csv", layout="wide")
-st.title("WAV to CSV（polyphase, Kaiser β=8.6）")
+st.title("WAV to CSV")
 
 MAX_PLOT_POINTS = 200_000  # 表示の負荷対策
 
