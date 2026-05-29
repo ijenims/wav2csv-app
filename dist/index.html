@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAV to CSV</title>
+<link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body>
+
+<!-- サイドバー -->
+<aside class="sidebar">
+  <h2>操作</h2>
+  <label for="wav-input">WAVファイルをアップロード</label>
+  <input type="file" id="wav-input" accept=".wav,.WAV" style="display:none;">
+  <button type="button" id="btn-file-select" style="width:100%; padding:8px 12px; border:1px dashed #d1d5db; border-radius:6px; background:#f8fafc; color:#475569; font-size:0.82rem; cursor:pointer; text-align:left; margin-bottom:4px;">ファイルを選択...</button>
+  <div id="file-name-display" style="display:none; font-size:0.78rem; color:#334155; margin-top:2px; padding:4px 8px; background:#f0fdf4; border-radius:4px; word-break:break-all;"></div>
+
+  <div id="meta-info" class="meta-info" style="display:none;"></div>
+  <div id="size-warning" class="warning" style="display:none;"></div>
+
+  <label for="fs-out">変換後サンプリング周波数 Fs[Hz]</label>
+  <input type="number" id="fs-out" value="1000" min="100" max="2000" step="10">
+
+  <label for="csv-name">CSVファイル名</label>
+  <input type="text" id="csv-name" value="output.csv">
+
+  <!-- プログレスバー -->
+  <div id="progress-container" style="display:none; margin-top:16px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div style="flex:1; background:#e9ecef; border-radius:4px; height:6px; overflow:hidden;">
+        <div id="progress-bar" style="height:100%; background:#0d6efd; width:0%; transition:width 0.2s;"></div>
+      </div>
+    </div>
+    <span id="progress-text" style="font-size:0.75rem; color:#555; margin-top:4px; display:block;"></span>
+  </div>
+</aside>
+
+<!-- メインエリア -->
+<main class="main">
+  <h1>WAV to CSV <a href="help.html" style="font-size:0.7rem; font-weight:400; color:#94a3b8; text-decoration:none; margin-left:8px;">ヘルプ</a></h1>
+  <div id="placeholder" class="info-box" style="border: 2px dashed #d1d5db; text-align:center;">WAVファイルをアップロードまたはここにドラッグ&ドロップ</div>
+
+  <div id="raw-section" style="display:none;">
+    <h3>元データ</h3>
+    <div id="charts-raw"></div>
+  </div>
+
+  <div id="resample-section" style="display:none;">
+    <h3>リサンプリング</h3>
+    <button class="btn btn-primary" id="btn-resample">リサンプル（指定Fsへ）</button>
+    <div id="resample-status"></div>
+  </div>
+
+  <div id="result-section" style="display:none;">
+    <h3>変換後データ</h3>
+    <div id="charts-resampled"></div>
+    <p style="font-size:0.85rem; margin-bottom:6px;">先頭5行プレビュー：</p>
+    <table class="preview-table" id="preview-table"></table>
+    <button class="btn btn-success" id="btn-download">CSVをダウンロード</button>
+  </div>
+
+  <footer>© WAV→CSV / Lanczos sinc resampling / 多ch対応 / plot≤200kpts</footer>
+</main>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAV to CSV - ヘルプ</title>
+<link rel="stylesheet" href="css/style.css?v=2">
+<style>
+body { display: block; background: #fff; }
+.help-container {
+  max-width: 720px; margin: 0 auto; padding: 40px 32px;
+}
+.help-container h1 { margin-bottom: 8px; }
+.help-container .subtitle { color: #64748b; font-size: 0.88rem; margin-bottom: 32px; }
+.help-container h2 {
+  font-size: 1rem; font-weight: 600; color: #334155;
+  margin: 28px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9;
+}
+.help-container p, .help-container li {
+  font-size: 0.88rem; line-height: 1.7; color: #475569;
+}
+.help-container ul, .help-container ol {
+  padding-left: 20px; margin: 8px 0;
+}
+.help-container li { margin-bottom: 4px; }
+.help-container code {
+  background: #f1f5f9; padding: 2px 6px; border-radius: 4px;
+  font-size: 0.82rem; color: #334155;
+}
+.help-container .note {
+  background: #f8fafc; border-left: 3px solid #94a3b8;
+  padding: 10px 14px; margin: 12px 0; border-radius: 0 6px 6px 0;
+  font-size: 0.82rem; color: #64748b;
+}
+.help-container .caution {
+  background: #fffbeb; border-left: 3px solid #f59e0b;
+  padding: 10px 14px; margin: 12px 0; border-radius: 0 6px 6px 0;
+  font-size: 0.82rem; color: #92400e;
+}
+.help-container table {
+  width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.82rem;
+}
+.help-container th, .help-container td {
+  border-bottom: 1px solid #f1f5f9; padding: 8px 10px; text-align: left;
+}
+.help-container th { color: #94a3b8; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; }
+.back-link { display: inline-block; margin-top: 24px; font-size: 0.82rem; color: #0369a1; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="help-container">
+
+<h1>WAV to CSV ヘルプ</h1>
+<p class="subtitle">加速度計WAVデータ → COMWAY対応CSVへの変換ツール</p>
+
+<h2>このアプリについて</h2>
+<p>加速度計（振動計）から取得したWAV形式の計測データを、指定したサンプリング周波数にリサンプリングし、COMWAY アプリで読み込み可能なCSV形式に変換・ダウンロードするためのツールです。</p>
+
+<h2>主な機能</h2>
+<ul>
+  <li>WAVファイルの読み込み（PCM 8/16/24/32bit、IEEE float 32/64bit対応）</li>
+  <li>マルチチャンネル対応（加速度計の多軸データに対応）</li>
+  <li>任意のサンプリング周波数（100〜2000 Hz）へのリサンプリング</li>
+  <li>リサンプリング前後の波形グラフ表示</li>
+  <li>COMWAY対応CSV形式でのダウンロード</li>
+</ul>
+
+<h2>使い方</h2>
+<ol>
+  <li><strong>WAVファイルを選択</strong> — サイドバーの「ファイルを選択」から加速度計のWAVデータを読み込む。画面上にドラッグ&ドロップでも読み込み可能</li>
+  <li><strong>メタ情報を確認</strong> — チャンネル数、サンプル数、元のサンプリング周波数、推定時間が表示される</li>
+  <li><strong>変換後Fsを指定</strong> — COMWAY側で必要なサンプリング周波数を入力（既定: 1000 Hz）</li>
+  <li><strong>「リサンプル」ボタンを押す</strong> — Lanczos sinc補間でリサンプリングが実行される</li>
+  <li><strong>波形とプレビューを確認</strong> — 変換後のグラフと先頭5行のデータを確認</li>
+  <li><strong>「CSVをダウンロード」</strong> — COMWAY対応形式のCSVファイルがダウンロードされる</li>
+</ol>
+
+<h2>出力CSV仕様</h2>
+<table>
+  <tr><th>列</th><th>内容</th></tr>
+  <tr><td>1列目</td><td><code>ags</code>（固定文字列）</td></tr>
+  <tr><td>2列目</td><td>サンプル番号（0始まり）</td></tr>
+  <tr><td>3〜(2+ch)列目</td><td>各チャンネルの加速度データ（小数6桁）</td></tr>
+  <tr><td>残り列</td><td>0埋め（合計8列固定）</td></tr>
+</table>
+<div class="note">ヘッダ行なし、文字コードUTF-8、改行コードLF</div>
+
+<h2>注意事項</h2>
+<div class="caution">
+  <strong>対応フォーマット</strong>：WAV（RIFF/WAVE）形式のみ対応しています。MP3やFLAC等は読み込めません。
+</div>
+<ul>
+  <li><strong>ファイルサイズ</strong> — 200MBを超えるファイルは処理に時間がかかる場合があります。ブラウザのメモリ制限にも注意してください。</li>
+  <li><strong>サンプリング周波数の選択</strong> — 元のFsより高い値を指定するとアップサンプリングになります。通常は元のFsより低い値（ダウンサンプリング）を指定します。</li>
+  <li><strong>リサンプリング品質</strong> — Lanczos sinc補間（a=3）+ 移動平均アンチエイリアシングフィルタを使用しています。計測データの実用上十分な品質ですが、厳密な信号処理が必要な場合は専用ソフトウェアの使用を検討してください。</li>
+  <li><strong>チャンネル順序</strong> — WAVファイル内のチャンネル順序がそのままCSVに反映されます。加速度計の軸割り当て（X/Y/Z等）はWAVファイルの記録順に依存します。</li>
+  <li><strong>データの単位</strong> — WAVのPCMデータは -1.0〜+1.0 に正規化されて出力されます。物理単位（m/s²等）への変換は別途行ってください。</li>
+</ul>
+
+<h2>動作環境</h2>
+<ul>
+  <li>モダンブラウザ（Chrome, Edge, Firefox, Safari の最新版）</li>
+  <li>サーバ上で動作（<code>file://</code> プロトコルでは動作しません）</li>
+  <li>処理はすべてブラウザ内で完結します（データがサーバに送信されることはありません）</li>
+</ul>
+
+<a href="index.html" class="back-link">← アプリに戻る</a>
+
+</div>
+</body>
+</html>

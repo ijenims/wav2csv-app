@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAV to CSV</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; min-height: 100vh; background: #f8f9fa; }
+
+/* サイドバー */
+.sidebar {
+  width: 300px; min-width: 300px; background: #fff; border-right: 1px solid #e0e0e0;
+  padding: 20px; overflow-y: auto;
+}
+.sidebar h2 { font-size: 1.1rem; margin-bottom: 16px; color: #333; }
+.sidebar label { display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px; margin-top: 12px; }
+.sidebar input[type="file"] { width: 100%; margin-bottom: 8px; }
+.sidebar input[type="number"], .sidebar input[type="text"] {
+  width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem;
+}
+.meta-info { background: #f0f4f8; border-radius: 6px; padding: 10px; margin-top: 12px; font-size: 0.82rem; color: #444; }
+.meta-info p { margin: 4px 0; }
+.warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 8px; margin-top: 8px; font-size: 0.8rem; color: #856404; }
+
+/* メインエリア */
+.main { flex: 1; padding: 24px; overflow-y: auto; }
+.main h1 { font-size: 1.5rem; margin-bottom: 16px; color: #222; }
+.main h3 { font-size: 1.1rem; margin: 20px 0 10px; color: #333; }
+.info-box { background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px; color: #0c5460; margin-bottom: 16px; }
+.chart-container { position: relative; width: 100%; height: 250px; margin-bottom: 16px; }
+
+/* ボタン */
+.btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 0.9rem; cursor: pointer; margin-top: 12px; }
+.btn-primary { background: #0d6efd; color: #fff; }
+.btn-primary:hover { background: #0b5ed7; }
+.btn-primary:disabled { background: #6c9bd4; cursor: not-allowed; }
+.btn-success { background: #198754; color: #fff; }
+.btn-success:hover { background: #157347; }
+.success-msg { background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 10px; color: #155724; margin: 10px 0; font-size: 0.85rem; }
+
+/* プレビューテーブル */
+.preview-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 10px 0; }
+.preview-table th, .preview-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
+.preview-table th { background: #f0f0f0; }
+
+footer { margin-top: 30px; font-size: 0.75rem; color: #888; }
+</style>
+</head>
+<body>
+
+<!-- サイドバー -->
+<aside class="sidebar">
+  <h2>操作</h2>
+  <label for="wav-input">WAVファイルをアップロード</label>
+  <input type="file" id="wav-input" accept=".wav,.WAV">
+
+  <div id="meta-info" class="meta-info" style="display:none;"></div>
+  <div id="size-warning" class="warning" style="display:none;"></div>
+
+  <label for="fs-out">変換後サンプリング周波数 Fs[Hz]</label>
+  <input type="number" id="fs-out" value="1000" min="100" max="2000" step="10">
+
+  <label for="csv-name">CSVファイル名</label>
+  <input type="text" id="csv-name" value="output.csv">
+</aside>
+
+<!-- メインエリア -->
+<main class="main">
+  <h1>WAV to CSV</h1>
+  <div id="placeholder" class="info-box">左のサイドバーからWAVをアップロードしてな。</div>
+
+  <div id="raw-section" style="display:none;">
+    <h3>元データ</h3>
+    <div class="chart-container"><canvas id="chart-raw"></canvas></div>
+  </div>
+
+  <div id="resample-section" style="display:none;">
+    <h3>リサンプリング</h3>
+    <button class="btn btn-primary" id="btn-resample">リサンプル（指定Fsへ）</button>
+    <div id="resample-status"></div>
+  </div>
+
+  <div id="result-section" style="display:none;">
+    <h3>変換後データ</h3>
+    <div class="chart-container"><canvas id="chart-resampled"></canvas></div>
+    <p style="font-size:0.85rem; margin-bottom:6px;">先頭5行プレビュー：</p>
+    <table class="preview-table" id="preview-table"></table>
+    <button class="btn btn-success" id="btn-download">CSVをダウンロード</button>
+  </div>
+
+  <footer>© WAV→CSV / Lanczos sinc resampling / 多ch対応 / plot≤200kpts</footer>
+</main>
+
+<script>
+// -------------------- グローバル状態 --------------------
+let rawData = null;      // { samples: Float32Array[], fs: number, channels: number, length: number }
+let resampledData = null; // { samples: Float32Array[], fs: number, channels: number, length: number }
+let chartRaw = null;
+let chartResampled = null;
+const MAX_PLOT_POINTS = 200000;
+
+// -------------------- WAV パース --------------------
+function parseWav(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+
+  // RIFF ヘッダ確認
+  const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+  if (riff !== 'RIFF') throw new Error('RIFFヘッダが見つかりません');
+
+  const wave = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
+  if (wave !== 'WAVE') throw new Error('WAVEフォーマットではありません');
+
+  // チャンク探索
+  let offset = 12;
+  let fmtFound = false, dataOffset = 0, dataSize = 0;
+  let numChannels, sampleRate, bitsPerSample, audioFormat;
+
+  while (offset < view.byteLength - 8) {
+    const chunkId = String.fromCharCode(view.getUint8(offset), view.getUint8(offset+1), view.getUint8(offset+2), view.getUint8(offset+3));
+    const chunkSize = view.getUint32(offset + 4, true);
+
+    if (chunkId === 'fmt ') {
+      audioFormat = view.getUint16(offset + 8, true);
+      numChannels = view.getUint16(offset + 10, true);
+      sampleRate = view.getUint32(offset + 12, true);
+      bitsPerSample = view.getUint16(offset + 22, true);
+      fmtFound = true;
+    } else if (chunkId === 'data') {
+      dataOffset = offset + 8;
+      dataSize = chunkSize;
+    }
+
+    offset += 8 + chunkSize;
+    if (offset % 2 !== 0) offset++; // パディング
+  }
+
+  if (!fmtFound) throw new Error('fmtチャンクが見つかりません');
+  if (!dataOffset) throw new Error('dataチャンクが見つかりません');
+  if (audioFormat !== 1 && audioFormat !== 3) throw new Error(`未対応フォーマット (audioFormat=${audioFormat})`);
+
+  const bytesPerSample = bitsPerSample / 8;
+  const numSamples = Math.floor(dataSize / (bytesPerSample * numChannels));
+
+  // チャンネルごとにFloat32Arrayを作成
+  const channels = [];
+  for (let ch = 0; ch < numChannels; ch++) {
+    channels.push(new Float32Array(numSamples));
+  }
+
+  let pos = dataOffset;
+  for (let i = 0; i < numSamples; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      let sample = 0;
+      if (audioFormat === 3) {
+        // IEEE float
+        if (bitsPerSample === 32) sample = view.getFloat32(pos, true);
+        else if (bitsPerSample === 64) sample = view.getFloat64(pos, true);
+      } else {
+        // PCM integer
+        if (bitsPerSample === 16) {
+          sample = view.getInt16(pos, true) / 32768;
+        } else if (bitsPerSample === 24) {
+          let val = view.getUint8(pos) | (view.getUint8(pos+1) << 8) | (view.getUint8(pos+2) << 16);
+          if (val & 0x800000) val |= ~0xFFFFFF; // 符号拡張
+          sample = val / 8388608;
+        } else if (bitsPerSample === 32) {
+          sample = view.getInt32(pos, true) / 2147483648;
+        } else if (bitsPerSample === 8) {
+          sample = (view.getUint8(pos) - 128) / 128;
+        }
+      }
+      channels[ch][i] = sample;
+      pos += bytesPerSample;
+    }
+  }
+
+  return { samples: channels, fs: sampleRate, channels: numChannels, length: numSamples };
+}
+
+// -------------------- リサンプリング (sinc補間) --------------------
+function sincInterpolate(input, fsIn, fsOut) {
+  // Lanczos sinc補間 (a=3) — 品質と速度のバランスが良い
+  const a = 3; // Lanczos窓の半径
+  const ratio = fsIn / fsOut;
+  const outLen = Math.round(input.length / ratio);
+  const output = new Float32Array(outLen);
+
+  for (let i = 0; i < outLen; i++) {
+    const srcPos = i * ratio; // 元データ上の位置（実数）
+    const srcIdx = Math.floor(srcPos);
+    let sum = 0;
+    let weightSum = 0;
+
+    const jStart = Math.max(0, srcIdx - a + 1);
+    const jEnd = Math.min(input.length - 1, srcIdx + a);
+
+    for (let j = jStart; j <= jEnd; j++) {
+      const x = srcPos - j;
+      // Lanczos kernel: sinc(x) * sinc(x/a)
+      let w;
+      if (x === 0) {
+        w = 1;
+      } else if (Math.abs(x) >= a) {
+        w = 0;
+      } else {
+        const px = Math.PI * x;
+        w = (Math.sin(px) / px) * (Math.sin(px / a) / (px / a));
+      }
+      sum += input[j] * w;
+      weightSum += w;
+    }
+    output[i] = weightSum !== 0 ? sum / weightSum : 0;
+  }
+  return output;
+}
+
+async function resample(rawData, targetFs) {
+  const { samples, fs, channels, length } = rawData;
+
+  // ダウンサンプル時はエイリアシング防止のためローパスフィルタを適用
+  let filtered = samples;
+  if (targetFs < fs) {
+    // 簡易ローパス: 移動平均フィルタ（カットオフ ≈ targetFs/2）
+    const decimFactor = Math.floor(fs / targetFs);
+    const kernelSize = Math.min(decimFactor * 2 + 1, 63); // 奇数、最大63タップ
+    filtered = [];
+    for (let ch = 0; ch < channels; ch++) {
+      const src = samples[ch];
+      const out = new Float32Array(src.length);
+      const half = Math.floor(kernelSize / 2);
+      for (let i = 0; i < src.length; i++) {
+        let sum = 0, count = 0;
+        const start = Math.max(0, i - half);
+        const end = Math.min(src.length - 1, i + half);
+        for (let j = start; j <= end; j++) {
+          sum += src[j]; count++;
+        }
+        out[i] = sum / count;
+      }
+      filtered.push(out);
+    }
+  }
+
+  // sinc補間でリサンプリング
+  const result = [];
+  for (let ch = 0; ch < channels; ch++) {
+    result.push(sincInterpolate(filtered[ch], fs, targetFs));
+  }
+
+  const newLength = result[0].length;
+  return { samples: result, fs: targetFs, channels, length: newLength };
+}
+
+// -------------------- グラフ描画 --------------------
+function downsampleForPlot(arr, limit) {
+  if (arr.length <= limit) return arr;
+  const factor = Math.ceil(arr.length / limit);
+  const out = [];
+  for (let i = 0; i < arr.length; i += factor) {
+    let sum = 0, count = 0;
+    for (let j = i; j < Math.min(i + factor, arr.length); j++) {
+      sum += arr[j]; count++;
+    }
+    out.push(sum / count);
+  }
+  return out;
+}
+
+function plotData(canvasId, data, title) {
+  const canvas = document.getElementById(canvasId);
+  const { samples, channels, fs } = data;
+  const limitPerCh = Math.floor(MAX_PLOT_POINTS / channels);
+
+  const datasets = [];
+  const colors = ['#2196F3', '#FF5722', '#4CAF50', '#9C27B0', '#FF9800', '#00BCD4', '#E91E63', '#607D8B'];
+
+  for (let ch = 0; ch < channels; ch++) {
+    const plotArr = downsampleForPlot(samples[ch], limitPerCh);
+    datasets.push({
+      label: `ch${ch}`,
+      data: plotArr,
+      borderColor: colors[ch % colors.length],
+      borderWidth: 1,
+      pointRadius: 0,
+      tension: 0,
+    });
+  }
+
+  const config = {
+    type: 'line',
+    data: { labels: Array.from({length: datasets[0].data.length}, (_, i) => i), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: false,
+      plugins: { title: { display: true, text: title }, legend: { display: channels > 1 } },
+      scales: {
+        x: { display: true, title: { display: true, text: 'sample (downsampled for plot)' }, ticks: { maxTicksLimit: 10 } },
+        y: { display: true }
+      },
+      elements: { line: { borderWidth: 1 } }
+    }
+  };
+
+  if (canvasId === 'chart-raw') {
+    if (chartRaw) chartRaw.destroy();
+    chartRaw = new Chart(canvas, config);
+  } else {
+    if (chartResampled) chartResampled.destroy();
+    chartResampled = new Chart(canvas, config);
+  }
+}
+
+// -------------------- CSV生成 --------------------
+function generateCsv(data) {
+  const { samples, channels, length } = data;
+  let csv = '';
+  for (let i = 0; i < length; i++) {
+    const row = ['ags', i];
+    for (let ch = 0; ch < channels; ch++) {
+      row.push(samples[ch][i].toFixed(6));
+    }
+    // 8列固定、残りは0埋め
+    while (row.length < 8) row.push('0');
+    csv += row.join(',') + '\n';
+  }
+  return csv;
+}
+
+function downloadCsv(csvString, filename) {
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// -------------------- プレビューテーブル --------------------
+function showPreview(data) {
+  const table = document.getElementById('preview-table');
+  const { samples, channels, length } = data;
+  const rows = Math.min(5, length);
+
+  let html = '<tr><th></th><th>idx</th>';
+  for (let ch = 0; ch < channels; ch++) html += `<th>ch${ch}</th>`;
+  for (let i = channels; i < 6; i++) html += '<th>-</th>';
+  html += '</tr>';
+
+  for (let i = 0; i < rows; i++) {
+    html += `<tr><td>ags</td><td>${i}</td>`;
+    for (let ch = 0; ch < channels; ch++) html += `<td>${samples[ch][i].toFixed(6)}</td>`;
+    for (let j = channels; j < 6; j++) html += '<td>0</td>';
+    html += '</tr>';
+  }
+  table.innerHTML = html;
+}
+
+// -------------------- イベントハンドラ --------------------
+document.getElementById('wav-input').addEventListener('change', async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // ファイル名からCSV名を設定
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  document.getElementById('csv-name').value = baseName + '.csv';
+
+  // サイズ警告
+  const sizeMb = file.size / (1024 * 1024);
+  const warning = document.getElementById('size-warning');
+  if (sizeMb > 200) {
+    warning.textContent = `アップロードサイズが大きいです（約 ${sizeMb.toFixed(1)} MB）。処理に時間がかかる場合があります。`;
+    warning.style.display = 'block';
+  } else {
+    warning.style.display = 'none';
+  }
+
+  // WAV読み込み
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    rawData = parseWav(arrayBuffer);
+  } catch (err) {
+    alert('WAV読み込みエラー: ' + err.message);
+    return;
+  }
+
+  // メタ情報表示
+  const meta = document.getElementById('meta-info');
+  const duration = rawData.length / rawData.fs;
+  meta.innerHTML = `
+    <p><strong>チャンネル数</strong>: ${rawData.channels}</p>
+    <p><strong>データ長[サンプル]</strong>: ${rawData.length}</p>
+    <p><strong>サンプリング周波数 Fs[Hz]</strong>: ${rawData.fs}</p>
+    <p><strong>推定時間[秒]</strong>: ${duration.toFixed(3)}</p>
+  `;
+  meta.style.display = 'block';
+
+  // UI表示切替
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('raw-section').style.display = 'block';
+  document.getElementById('resample-section').style.display = 'block';
+  document.getElementById('result-section').style.display = 'none';
+
+  // 元データグラフ
+  plotData('chart-raw', rawData, `raw @ ${rawData.fs} Hz`);
+
+  // リサンプル結果リセット
+  resampledData = null;
+});
+
+document.getElementById('btn-resample').addEventListener('click', async function() {
+  if (!rawData) return;
+
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = '処理中...';
+  const status = document.getElementById('resample-status');
+  status.innerHTML = '';
+
+  const fsOut = parseInt(document.getElementById('fs-out').value, 10);
+
+  try {
+    resampledData = await resample(rawData, fsOut);
+    status.innerHTML = `<div class="success-msg">変換完了: ${rawData.fs} Hz → ${fsOut} Hz / 形状: (${resampledData.length}, ${resampledData.channels})</div>`;
+
+    // 変換後グラフ
+    document.getElementById('result-section').style.display = 'block';
+    plotData('chart-resampled', resampledData, `resampled @ ${fsOut} Hz`);
+    showPreview(resampledData);
+  } catch (err) {
+    status.innerHTML = `<div class="warning">エラー: ${err.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'リサンプル（指定Fsへ）';
+});
+
+document.getElementById('btn-download').addEventListener('click', function() {
+  if (!resampledData) return;
+  const filename = document.getElementById('csv-name').value || 'output.csv';
+  const csv = generateCsv(resampledData);
+  downloadCsv(csv, filename);
+});
+</script>
+</body>
+</html>
