@@ -1,0 +1,29 @@
+# データ
+outputs/
+raw_data/
+sample_wav/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# エディタ
+*.swp
+*.swo
+*~
+
+# Node (将来ビルドツール入れた場合)
+node_modules/
+
+# 環境変数
+.env
+.env.local
